@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  app:
+    build: .
+    image: lab-api:latest
+    env_file:
+      - .env
+    command: gunicorn -b 0.0.0.0:8000 app.wsgi:app
+    volumes:
+      - ./:/app
+      - docs-data:/mnt/docs
+    depends_on:
+      - db
+      - redis
+      - onlyoffice-d
+    ports:
+      - "8000:8000"
+
+  db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: labcode
+      MYSQL_USER: labadmin
+      MYSQL_PASSWORD: password
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+
+  onlyoffice-d:
+    image: onlyoffice/documentserver:7.5
+    restart: unless-stopped
+    environment:
+      - JWT_ENABLED=false
+    volumes:
+      - docs-data:/var/www/onlyoffice/Data
+      - ./scripts/fonts:/usr/share/fonts/truetype/custom
+    ports:
+      - "18080:80"
+
+volumes:
+  db-data:
+  redis-data:
+  docs-data:
