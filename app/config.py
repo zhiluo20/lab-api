@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 from json import loads
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseSettings, Field, validator
 
@@ -45,6 +45,12 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
 
+        @classmethod
+        def parse_env_var(cls, field_name: str, raw_value: Any):
+            if field_name == "cors_allowed_origins" and raw_value in ("", None):
+                return []
+            return BaseSettings.Config.parse_env_var(field_name, raw_value)
+
     @validator("api_keys_json", pre=True)
     def _parse_api_keys(cls, value: Any) -> Dict[str, List[str]]:
         if not value:
@@ -58,8 +64,8 @@ class Settings(BaseSettings):
         return parsed
 
     @validator("cors_allowed_origins", pre=True)
-    def _split_origins(cls, value: Any) -> List[str]:
-        if not value:
+    def _split_origins(cls, value: Union[str, List[str], None]) -> List[str]:
+        if value is None or value == "":
             return []
         if isinstance(value, list):
             return value

@@ -33,6 +33,18 @@ def create_app(settings_override: Settings | None = None) -> Flask:
     register_cli(app)
     close_db(app)
 
+    @app.route("/", methods=["GET"])
+    @limiter.exempt
+    def index() -> Any:
+        return jsonify(
+            {
+                "message": "Lab API backend up and running.",
+                "docs": "/docs",
+                "api_health": "/healthz",
+                "web_login": "/web/login",
+            }
+        )
+
     @app.route("/healthz", methods=["GET"])
     @limiter.exempt
     def healthcheck() -> Any:
@@ -64,6 +76,7 @@ def register_blueprints(app: Flask) -> None:
     from flask_swagger_ui import get_swaggerui_blueprint
 
     from .routes import (
+        admin_bp,
         auth_bp,
         crud_bp,
         docs_bp,
@@ -81,6 +94,7 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(samples_bp, url_prefix="/api/v1")
     app.register_blueprint(health_bp)
     app.register_blueprint(files_bp)
+    app.register_blueprint(admin_bp)
     app.register_blueprint(web_bp, url_prefix="/web")
 
     if app.config["APP_SETTINGS"].swagger_ui_enabled:

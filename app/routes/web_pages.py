@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, current_app, redirect, render_template, request, url_for
-from flask_jwt_extended import decode_token
-from flask_jwt_extended.exceptions import JWTExtendedException
-
+from flask import (
+    Blueprint,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from ..config import Settings
 from ..models.doc import Doc
 from ..models.user import User
 from ..services.auth_service import AuthService
 from ..services.onlyoffice_service import onlyoffice_service
-from ..utils.errors import APIError
+from ..utils.errors import APIError, UnauthorizedError
+from ..utils.security import decode_user_token
 
 
 web_bp = Blueprint("web", __name__, template_folder="../templates")
@@ -26,38 +32,29 @@ def get_settings() -> Settings:
 @web_bp.route("/login", methods=["GET", "POST"])
 def login_page():
     error: str | None = None
-    token_bundle: dict[str, str] | None = None
     if request.method == "POST":
         username = request.form.get("username", "")
         password = request.form.get("password", "")
         try:
             token_bundle = auth_service.authenticate_user(username, password)
+            access_token = token_bundle["access_token"]
+            return redirect(url_for("web.docs_list", token=access_token))
         except APIError as exc:  # pragma: no cover - UI convenience
             error = exc.message
         except Exception as exc:  # pragma: no cover - unexpected
             error = str(exc)
-    return render_template("login.html", error=error, tokens=token_bundle)
+        if error:
+            flash(error, "error")
+    return render_template("login.html", error=error)
 
 
 def _decode_user_token(token: str) -> tuple[User, dict]:
     try:
-        decoded = decode_token(token, allow_expired=False)
-    except JWTExtendedException as exc:
-        raise APIError(code="invalid_token", message=str(exc), status_code=400) from exc
-    identity = decoded["sub"]
-    if isinstance(identity, dict):
-        if identity.get("sub_type") != "user":
-            raise APIError(
-                code="invalid_token",
-                message="Token is not a user token",
-                status_code=400,
-            )
-        user_id = identity.get("user_id")
-    else:  # pragma: no cover - compatibility
-        user_id = identity
-    user = User.query.get(user_id)
-    if not user:
-        raise APIError(code="user_missing", message="User not found", status_code=404)
+        user, decoded = decode_user_token(token)
+    except UnauthorizedError as exc:
+        raise APIError(
+            code="invalid_token", message=exc.message, status_code=400
+        ) from exc
     return user, decoded
 
 

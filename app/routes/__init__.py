@@ -8,6 +8,7 @@ from .docs_api import docs_bp, files_bp
 from .health_api import health_bp
 from .labs_api import labs_bp
 from .samples_api import samples_bp
+from .admin_panel import admin_bp
 from .web_pages import web_bp
 
 __all__ = [
@@ -18,5 +19,6 @@ __all__ = [
     "health_bp",
     "labs_bp",
     "samples_bp",
+    "admin_bp",
     "web_bp",
 ]

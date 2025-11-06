@@ -9,25 +9,38 @@ Lab API is a Flask 3 service that powers laboratory management workflows, includ
 - OnlyOffice editor configuration and callback handling with optional JWT signing.
 - Alembic migrations, seeding scripts, and health checks for production readiness.
 - Makefile targets for formatting, linting, typing, testing, and Docker orchestration.
+- Built-in admin panel (`/admin/users?token=...`) for managing accounts, roles, permissions, document lifecycle, and audit logs.
+- Built-in admin panel (`/admin/users?token=...`) for managing accounts, scopes, and activation without leaving the browser.
 
 ## Getting Started (Local Python)
 1. **Clone & configure**
    ```bash
    cp .env.example .env
    ```
-   Adjust database credentials or point `DATABASE_URI` at a local MySQL/MariaDB (SQLite is fine for quick experiments).
+   Adjust database credentials or point `DATABASE_URI` at a local MySQL/MariaDB (SQLite is fine for quick experiments). The default `RATE_REDIS_URL=memory://` keeps rate limiting in-process; set it to your Redis instance only when one is available.
 
-2. **Create a virtualenv and install dependencies**
+2. **Create and activate the virtual environment**
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate        # macOS/Linux
+   # .venv\Scripts\activate.bat     # Windows (Command Prompt)
+   pip install --upgrade pip
+   pip install -r requirements.txt
+   ```
+   The Makefile provides shortcuts if you prefer:
    ```bash
    make venv
+   source .venv/bin/activate
    make dev
    ```
+   Re-run `source .venv/bin/activate` whenever you return to the project in a new shell.
 
 3. **Run migrations and seed an admin**
    ```bash
-   FLASK_APP=app.wsgi:app flask db upgrade
-   python scripts/seed_admin.py --username admin --email admin@example.com --password changeme
+   DATABASE_URI=sqlite:///lab.db FLASK_APP=app.wsgi:app flask db upgrade
+   python scripts/seed_admin.py --username admin --email admin@example.com --password changeme --database-uri sqlite:///lab.db
    ```
+   The commands above target a local SQLite file (`lab.db`). If you prefer MariaDB/MySQL, point `DATABASE_URI` to your server (e.g. `mysql+pymysql://user:pass@localhost:3306/labcode`) and omit the `--database-uri` override when seeding. The migration creates default roles (`admin`, `editor`, `viewer`) and seeds their permission matrix.
 
 4. **Start the dev server**
    ```bash
@@ -46,6 +59,14 @@ Services:
 - `onlyoffice-d`: OnlyOffice DocumentServer exposed on `http://localhost:18080`.
 
 Fonts for OnlyOffice can be copied into `scripts/fonts/` via `scripts/load_fonts.sh`. Restart `onlyoffice-d` afterwards.
+
+### Using the Compose database from the host
+If you want to run the Flask app directly against the dockerised MariaDB, export:
+```bash
+export DATABASE_URI="mysql+pymysql://labadmin:password@127.0.0.1:3306/labcode"
+export RATE_REDIS_URL="redis://127.0.0.1:6379/0"
+```
+and then repeat the migration/seed steps without overriding the URI. (Mac/Windows users may need to replace `127.0.0.1` with the Docker host address.)
 
 ## Makefile Cheat Sheet
 - `make fmt` – black format `app/` and `tests/`.
@@ -76,6 +97,18 @@ Pass the JWT access token via `Authorization: Bearer <token>` and ensure scope c
 ## OnlyOffice Integration
 Configure DocumentServer’s `JWT_ENABLED` and `JWT_SECRET` to match `.env` when enabling signed requests. The `/api/v1/docs/{id}/edit` endpoint returns both an editor config and a presigned document URL exposed through `/files/<path>`. OnlyOffice callback payloads post to `/api/v1/docs/{id}/callback` and are recorded in `file_ledger` for auditing.
 
+## Admin Panel Quick Tour
+Sign in as an administrator (e.g. `admin/changeme`) and you will be redirected to the document catalogue. If the account has admin privileges, an **Admin Panel** button appears, linking to `/admin/users?token=<access_token>`. The panel provides:
+
+- **Dashboard:** high-level metrics and recent activity feed (audit entries stored in `activity_logs`).
+- **User Management:** search/filter, create, edit, disable/delete users, reset passwords, assign roles/scopes, inspect login history.
+- **Role & Permission Builder:** create roles, tweak permission matrix (resources/actions), flag defaults for new sign-ups, and remove deprecated roles.
+- **Document Control:** search documents, inspect version history, manage shares, leave comments, and log governance actions (including ad-hoc version notes).
+
+All admin actions are captured in `activity_logs`, and login attempts are tracked inside `login_logs`. Use the generated links in the UI or call the REST APIs with the same access token (`Authorization: Bearer <token>`).
+
+> Tip: The admin panel is token-driven. If you bookmark a view, keep the `?token=` portion or obtain a fresh token from `/web/login`.
+
 ## Project Structure
 ```
 lab-api/
@@ -91,3 +124,5 @@ lab-api/
 ```
 
 For additional operational guidance (production, backups, monitoring), read `DEPLOY.md`.
+
+> ℹ️ **Tip:** After exporting environment variables (e.g. `export DATABASE_URI=sqlite:///lab.db`), they apply only to that terminal session. Activate your virtual environment (`source .venv/bin/activate`) and re-export the variables whenever you open a new shell before rerunning migration or seeding commands.

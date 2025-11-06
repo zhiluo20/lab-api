@@ -21,6 +21,18 @@ class Doc(BaseModel):
     )
 
     owner = relationship("User", back_populates="docs")
+    versions = relationship(
+        "DocVersion",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocVersion.version_number.desc()",
+    )
+    shares = relationship(
+        "DocShare", back_populates="document", cascade="all, delete-orphan"
+    )
+    comments = relationship(
+        "DocComment", back_populates="document", cascade="all, delete-orphan"
+    )
 
 
 __all__ = ["Doc"]

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, Optional
 
-from flask import current_app
+from flask import current_app, request
 from flask_jwt_extended import create_access_token, create_refresh_token
 
 from ..config import Settings, settings as default_settings
@@ -14,9 +14,13 @@ from ..utils.errors import APIError, UnauthorizedError
 from ..utils.security import generate_token, hash_password, verify_password
 from .password_service import PasswordService
 
+from ..models.activity_log import ActivityLog
 from ..models.invite import InviteCode
+from ..models.login_log import LoginLog
+from ..models.role import Role
 from ..models.user import User
 from ..models.user_permissions import UserPermissionEntry
+from ..models.user_role import UserRole
 
 
 class AuthService:
@@ -77,6 +81,24 @@ class AuthService:
             raise UnauthorizedError(message="Invalid credentials")
 
         user.last_login_at = datetime.utcnow()
+        db.session.add(
+            LoginLog(
+                user_id=user.id,
+                ip_address=request.remote_addr if request else None,
+                user_agent=request.user_agent.string if request else None,
+            )
+        )
+        db.session.commit()
+
+        db.session.add(
+            ActivityLog(
+                actor_id=user.id,
+                action="login",
+                target_type="user",
+                target_id=str(user.id),
+                details={"username": user.username},
+            )
+        )
         db.session.commit()
 
         identity = {"sub_type": "user", "user_id": user.id}
@@ -121,6 +143,20 @@ class AuthService:
         for scope in scopes_to_assign:
             db.session.add(UserPermissionEntry(user_id=user.id, scope=scope))
 
+        default_roles = Role.query.filter_by(is_default=True).all()
+        for role in default_roles:
+            db.session.add(UserRole(user_id=user.id, role_id=role.id))
+
+        db.session.commit()
+        db.session.add(
+            ActivityLog(
+                actor_id=None,
+                action="register_user",
+                target_type="user",
+                target_id=str(user.id),
+                details={"username": user.username, "email": user.email},
+            )
+        )
         db.session.commit()
         return user
 

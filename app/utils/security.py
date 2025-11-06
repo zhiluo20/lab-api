@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import secrets
-from typing import Iterable, Sequence
+from typing import Iterable, Sequence, Tuple, Dict, Any
 
-from flask_jwt_extended import get_jwt, get_jwt_identity
+from flask_jwt_extended import get_jwt, get_jwt_identity, decode_token
+from flask_jwt_extended.exceptions import JWTExtendedException
 from passlib.hash import pbkdf2_sha256, scrypt
 
 from ..models.user import User
@@ -75,3 +76,25 @@ def get_current_user() -> User:
 def token_from_invite(code: str) -> str:
     """Generate deterministic tokens for invite codes (used for testing)."""
     return secrets.token_urlsafe(16) + code[-4:]
+
+
+def decode_user_token(
+    token: str, *, allow_expired: bool = False
+) -> Tuple[User, Dict[str, Any]]:
+    """Decode a standalone JWT access token and return the associated user."""
+    try:
+        decoded = decode_token(token, allow_expired=allow_expired)
+    except JWTExtendedException as exc:
+        raise UnauthorizedError(message=str(exc)) from exc
+    identity = decoded.get("sub")
+    user_id = None
+    if isinstance(identity, dict):
+        if identity.get("sub_type") != "user":
+            raise UnauthorizedError(message="Token is not a user token")
+        user_id = identity.get("user_id")
+    else:
+        user_id = identity
+    user = User.query.get(user_id)
+    if not user:
+        raise UnauthorizedError(message="User not found")
+    return user, decoded

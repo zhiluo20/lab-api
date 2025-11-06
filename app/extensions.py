@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import socket
 from typing import Any
+from urllib.parse import urlparse
 
 from flask import Flask
 from flask_jwt_extended import JWTManager
@@ -28,7 +30,11 @@ metadata = MetaData(
 db = SQLAlchemy(metadata=metadata)
 jwt = JWTManager()
 migrate = Migrate()
-limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200/minute"],
+    in_memory_fallback_enabled=True,
+)
 
 
 def init_extensions(app: Flask, settings: Settings) -> None:
@@ -45,7 +51,20 @@ def init_extensions(app: Flask, settings: Settings) -> None:
     )
 
     storage_uri = settings.rate_redis_url or "memory://"
-    app.config.setdefault("RATELIMIT_STORAGE_URI", storage_uri)
+    if storage_uri.startswith("redis://"):
+        parsed = urlparse(storage_uri)
+        host = parsed.hostname
+        port = parsed.port or 6379
+        try:
+            if host:
+                socket.getaddrinfo(host, port)
+        except socket.gaierror:
+            app.logger.warning(
+                "Redis host %s unreachable, falling back to in-memory rate limiting.",
+                host,
+            )
+            storage_uri = "memory://"
+    app.config["RATELIMIT_STORAGE_URI"] = storage_uri
     limiter.init_app(app)
     db.init_app(app)
     migrate.init_app(app, db=db)

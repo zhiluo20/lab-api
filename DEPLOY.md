@@ -8,6 +8,7 @@ This guide describes how to deploy the Lab API stack into production-like enviro
 - **Database:** provision MariaDB/MySQL with backups enabled (binlog + nightly snapshots). Ensure the application user has least-privilege access to the `labcode` schema.
 - **Redis:** deploy a Redis instance for Flask-Limiter. Configure persistence (AOF/RDB) based on RPO requirements.
 - **OnlyOffice:** provision `onlyoffice/documentserver` and set `JWT_ENABLED=true` with the same `OO_JWT_SECRET`. Mount custom fonts to `/usr/share/fonts/truetype/custom` and refresh via `fc-cache -f -v`.
+- **RBAC:** migrations seed default roles (`admin`, `editor`, `viewer`). Confirm they exist in the target database after `flask db upgrade`.
 
 ## 2. Build & Release
 - Build the multi-stage image: `docker build -t registry.example.com/lab-api:<tag> .`
@@ -26,6 +27,7 @@ This guide describes how to deploy the Lab API stack into production-like enviro
   - Liveness: `GET /healthz`
   - Readiness: `GET /health`
 - Enforce HTTPS and forward headers (`X-Forwarded-*`). Enable request logging in the reverse proxy.
+- Expose the admin console behind SSO or VPN in production; it is a token-gated HTML interface under `/admin/*`.
 
 ## 4. Observability & Security
 - Centralize logs (stdout/stderr) to your logging stack. Consider enabling structured JSON logs via Gunicorn configuration.
@@ -43,8 +45,9 @@ This guide describes how to deploy the Lab API stack into production-like enviro
 1. `GET /healthz` returns `200` with `{ "status": "ok" }`.
 2. Seeded admin authenticates via `POST /auth/login` and receives tokens.
 3. Access `/web/list?token=<access-token>` to confirm docs render.
-4. Hit `/api/v1/docs/{id}/edit` with a valid token to inspect OnlyOffice config.
-5. Execute `make test` (or the CI suite) against the deployed build artifact.
+4. Navigate to `/admin/users?token=<access-token>` and confirm you can see user listings, default roles, and activity feeds.
+5. Hit `/api/v1/docs/{id}/edit` with a valid token to inspect OnlyOffice config.
+6. Execute `make test` (or the CI suite) against the deployed build artifact.
 
 ## 7. Rollback Plan
 - Retain the previous container image and DB snapshot.

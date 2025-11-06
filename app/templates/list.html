@@ -12,8 +12,18 @@
     </style>
 </head>
 <body>
-    <h1>Documents</h1>
-    <p>Signed in as <strong>{{ user.username }}</strong>. Token will expire according to API policy.</p>
+    <header style="display:flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h1>Documents</h1>
+            <p>Signed in as <strong>{{ user.username }}</strong>. Token will expire according to API policy.</p>
+        </div>
+        <nav>
+            {% if user.is_admin %}
+                <a class="button" href="{{ url_for('admin.list_users', token=token) }}">Admin Panel</a>
+            {% endif %}
+            <a class="button" href="{{ url_for('web.login_page') }}">Log in as another user</a>
+        </nav>
+    </header>
 
     <table>
         <thead>

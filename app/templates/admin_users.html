@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Admin | Users</title>
+    <style>
+        body { font-family: sans-serif; margin: 2rem auto; max-width: 90rem; }
+        header { display: flex; justify-content: space-between; align-items: center; }
+        nav a { margin-right: 0.5rem; text-decoration: none; padding: 0.4rem 0.8rem; border-radius: 0.3rem; background: #0b5; color: #fff; }
+        nav a.secondary { background: #555; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; vertical-align: top; }
+        th { background: #f5f5f5; }
+        form.inline { display: inline-block; margin-right: 0.5rem; }
+        form.inline button { margin-top: 0.2rem; }
+        .panel { margin-top: 1.5rem; border: 1px solid #ddd; padding: 1rem; border-radius: 0.4rem; background: #fafafa; }
+        .flash { padding: 0.6rem 0.9rem; border-radius: 0.3rem; margin: 0.7rem 0; }
+        .flash.error { background: #fde2e2; color: #722; }
+        .flash.success { background: #e1f4e1; color: #064; }
+        .flash.info { background: #e1ebf4; color: #025; }
+        label { display: block; margin-top: 0.6rem; }
+        input[type=text], input[type=password], select, textarea { width: 100%; padding: 0.4rem; margin-top: 0.25rem; }
+        button { padding: 0.4rem 0.8rem; margin-top: 0.4rem; }
+        .flex { display: flex; gap: 1rem; }
+        .col { flex: 1; }
+        .tags { font-size: 0.9rem; }
+        .tags span { display: inline-block; background: #f0f0f5; padding: 0.2rem 0.5rem; margin: 0 0.2rem 0.2rem 0; border-radius: 0.3rem; }
+    </style>
+</head>
+<body>
+    <header>
+        <div>
+            <h1>Admin Panel — Users</h1>
+            <p>Manage platform accounts, roles, scopes, and login activity.</p>
+        </div>
+        <nav>
+            <a href="{{ url_for('admin.admin_index', token=token) }}">Dashboard</a>
+            <a href="{{ url_for('admin.list_roles', token=token) }}" class="secondary">Roles</a>
+            <a href="{{ url_for('admin.list_documents', token=token) }}" class="secondary">Documents</a>
+            <a href="{{ url_for('web.docs_list', token=token) }}" class="secondary">Return to docs</a>
+        </nav>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <section class="panel">
+        <form class="flex" method="get">
+            <input type="hidden" name="token" value="{{ token }}" />
+            <div class="col">
+                <label>Search
+                    <input type="text" name="search" value="{{ filters.search }}" placeholder="Search username or email" />
+                </label>
+            </div>
+            <div class="col">
+                <label>Status
+                    <select name="status">
+                        <option value="">All</option>
+                        <option value="active" {% if filters.status == 'active' %}selected{% endif %}>Active</option>
+                        <option value="inactive" {% if filters.status == 'inactive' %}selected{% endif %}>Inactive</option>
+                    </select>
+                </label>
+            </div>
+            <div class="col" style="align-self:flex-end;">
+                <button type="submit">Apply filters</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="panel">
+        <h2>Create User</h2>
+        <form method="post" action="{{ url_for('admin.create_user') }}">
+            <input type="hidden" name="token" value="{{ token }}" />
+            <div class="flex">
+                <div class="col">
+                    <label>Username
+                        <input type="text" name="username" required />
+                    </label>
+                </div>
+                <div class="col">
+                    <label>Email
+                        <input type="text" name="email" required />
+                    </label>
+                </div>
+                <div class="col">
+                    <label>Password
+                        <input type="password" name="password" placeholder="Defaults to ChangeMe123!" />
+                    </label>
+                </div>
+            </div>
+            <div class="flex">
+                <div class="col">
+                    <label>Status
+                        <select name="status">
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                    </label>
+                    <label>
+                        <input type="checkbox" name="flags" value="admin" /> Grant admin privileges
+                    </label>
+                </div>
+                <div class="col">
+                    <label>Assign roles</label>
+                    <select name="roles" multiple size="4">
+                        {% for role in roles %}
+                            <option value="{{ role.id }}">{{ role.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <small>Hold Cmd/Ctrl to select multiple.</small>
+                </div>
+                <div class="col">
+                    <label>API scopes</label>
+                    <label><input type="checkbox" name="scopes" value="db" checked /> Database CRUD</label>
+                    <label><input type="checkbox" name="scopes" value="doc" checked /> Document access</label>
+                </div>
+            </div>
+            <button type="submit">Create user</button>
+        </form>
+    </section>
+
+    <section class="panel">
+        <h2>User Directory</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>User</th>
+                    <th>Auth / Status</th>
+                    <th>Roles & Scopes</th>
+                    <th>Login</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                    <tr>
+                        <td>
+                            <strong>{{ user.username }}</strong><br/>
+                            <small>{{ user.email }}</small><br/>
+                            <small>Created: {{ user.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                        </td>
+                        <td>
+                            <div>Status: {{ 'Active' if user.is_active else 'Inactive' }}</div>
+                            <div>Admin: {{ 'Yes' if user.is_admin else 'No' }}</div>
+                            <div>Last login: {{ user.last_login_at or '—' }}</div>
+                        </td>
+                        <td class="tags">
+                            <div><strong>Roles:</strong>
+                                {% for assignment in user.roles %}
+                                    <span>{{ assignment.role.name }}</span>
+                                {% endfor %}
+                                {% if not user.roles %}<span>—</span>{% endif %}
+                            </div>
+                            <div><strong>Scopes:</strong>
+                                {% for scope in user.scopes %}
+                                    <span>{{ scope }}</span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('admin.user_login_logs', user_id=user.id, token=token) }}">View login logs</a>
+                        </td>
+                        <td>
+                            <form class="inline" method="post" action="{{ url_for('admin.update_user', user_id=user.id) }}">
+                                <input type="hidden" name="token" value="{{ token }}" />
+                                <label>Username<input type="text" name="username" value="{{ user.username }}" /></label>
+                                <label>Email<input type="text" name="email" value="{{ user.email }}" /></label>
+                                <label>Password<input type="password" name="password" placeholder="Leave blank to keep" /></label>
+                                <label>Status
+                                    <select name="status">
+                                        <option value="active" {% if user.is_active %}selected{% endif %}>Active</option>
+                                        <option value="inactive" {% if not user.is_active %}selected{% endif %}>Inactive</option>
+                                    </select>
+                                </label>
+                                <label><input type="checkbox" name="flags" value="admin" {% if user.is_admin %}checked{% endif %}/> Admin</label>
+                                <label>Roles
+                                    <select name="roles" multiple size="4">
+                                        {% set assigned = user.roles | map(attribute='role_id') | list %}
+                                        {% for role in roles %}
+                                            <option value="{{ role.id }}" {% if role.id in assigned %}selected{% endif %}>{{ role.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </label>
+                                <button type="submit">Save changes</button>
+                            </form>
+                            <form class="inline" method="post" action="{{ url_for('admin.update_user_scopes', user_id=user.id) }}">
+                                <input type="hidden" name="token" value="{{ token }}" />
+                                <input type="hidden" name="scope" value="db" />
+                                <input type="hidden" name="action" value="{{ 'remove' if 'db' in user.scopes else 'add' }}" />
+                                <button type="submit">{{ 'Revoke DB scope' if 'db' in user.scopes else 'Grant DB scope' }}</button>
+                            </form>
+                            <form class="inline" method="post" action="{{ url_for('admin.update_user_scopes', user_id=user.id) }}">
+                                <input type="hidden" name="token" value="{{ token }}" />
+                                <input type="hidden" name="scope" value="doc" />
+                                <input type="hidden" name="action" value="{{ 'remove' if 'doc' in user.scopes else 'add' }}" />
+                                <button type="submit">{{ 'Revoke DOC scope' if 'doc' in user.scopes else 'Grant DOC scope' }}</button>
+                            </form>
+                            <form class="inline" method="post" action="{{ url_for('admin.delete_user', user_id=user.id) }}" onsubmit="return confirm('Delete this user?');">
+                                <input type="hidden" name="token" value="{{ token }}" />
+                                <button type="submit">Delete user</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+</body>
+</html>

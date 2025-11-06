@@ -11,17 +11,17 @@ def _login(client: FlaskClient) -> dict:
     return res.get_json()
 
 
-def test_login_page_get_and_post(client, admin_user):
+def test_login_page_get_and_post(client, admin_user, sample_doc):
     response = client.get("/web/login")
     assert response.status_code == 200
 
-    res = client.post(
-        "/web/login",
-        data={"username": "admin", "password": "password"},
-        follow_redirects=True,
-    )
-    assert res.status_code == 200
-    assert "access_token" in res.get_data(as_text=True)
+    res = client.post("/web/login", data={"username": "admin", "password": "password"})
+    assert res.status_code == 302
+    assert res.headers["Location"].startswith("/web/list")
+
+    follow = client.get(res.headers["Location"])
+    assert follow.status_code == 200
+    assert sample_doc.name in follow.get_data(as_text=True)
 
 
 def test_docs_list_and_edit_html(client, admin_user, sample_doc):
